@@ -1,0 +1,13 @@
+# Core image handling, N4 correction, registration and headless QA
+numpy>=1.26,<3
+nibabel>=5.2,<6
+SimpleITK>=2.3,<3
+matplotlib>=3.8,<4
+requests>=2.31,<3
+torch>=2.0
+
+# HD-BET provides the required validated deep learning brain extractor.
+# For CPU-only environments, install a CPU build of PyTorch compatible with
+# the machine first if CUDA acceleration is required; run with --device cpu for
+# CPU-only processing.
+hd-bet>=2.0

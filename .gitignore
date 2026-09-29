@@ -1,0 +1,66 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Neuroimaging data and clinical scans (HIPAA/ADNI compliance & size limit)
+data/
+*.nii
+*.nii.gz
+*.dcm
+*.IMA
+*.mgz
+
+# Preprocessing outputs, reports, and logs
+reports/
+*.log
+mri_*_*/
+
+# Large template files (automatically fetched on demand by pipeline)
+templates/*.nii
+templates/*.nii.gz
+
+# Deep learning checkpoints and model weights
+*.pt
+*.pth
+*.bin
+*.onnx
+
+# Reference PDF documents
+*.pdf
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# IDE and OS metadata
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+extra/*
