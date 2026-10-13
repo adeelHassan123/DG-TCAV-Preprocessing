@@ -37,9 +37,10 @@ reports/
 *.log
 mri_*_*/
 
-# Large template files (automatically fetched on demand by pipeline)
+# Keep the configured registration template; ignore other template volumes.
 templates/*.nii
 templates/*.nii.gz
+!templates/mni152.nii.gz
 
 # Deep learning checkpoints and model weights
 *.pt
@@ -53,6 +54,7 @@ templates/*.nii.gz
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 */.ipynb_checkpoints/*
+.pytest_cache/
 
 # IDE and OS metadata
 .idea/
@@ -63,5 +65,7 @@ templates/*.nii.gz
 .DS_Store
 Thumbs.db
 desktop.ini
-extra
-Reference
+# Local reference checkout and supplementary files
+extra/
+reference/
+Reference/

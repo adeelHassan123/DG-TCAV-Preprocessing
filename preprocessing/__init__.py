@@ -1,12 +1,15 @@
-"""Production 3D structural MRI preprocessing package."""
+"""Structural MRI preprocessing package."""
 
 from .config import PipelineConfig
-from .normalization import normalize_brain_volume
 from .pipeline import PreprocessingResult, preprocess_mri_scan
+from .image_ops import normalize_zscore, registration, resize_image, skull_strip
 
 __all__ = [
     "PipelineConfig",
     "PreprocessingResult",
     "preprocess_mri_scan",
-    "normalize_brain_volume",
+    "normalize_zscore",
+    "registration",
+    "resize_image",
+    "skull_strip",
 ]
