@@ -9,7 +9,6 @@ import traceback
 from preprocessing.config import PipelineConfig
 from preprocessing.pipeline import preprocess_mri_scan
 from preprocessing.registration import ensure_mni_template
-from preprocessing.visualizer import generate_5step_progression_figure
 
 
 def discover_scans(input_dir: str | Path) -> list[tuple[str, str]]:
@@ -41,27 +40,12 @@ def _process_one(
     subject_id: str,
     input_path: str,
     output_dir: str,
-    report_dir: str,
-    visualize: bool,
     config: PipelineConfig,
 ) -> dict:
     output_path = Path(output_dir) / f"{subject_id}_preprocessed_mni152_2mm.nii.gz"
     result = preprocess_mri_scan(
-        input_path, str(output_path), collect_steps=visualize, config=config
+        input_path, str(output_path), collect_steps=False, config=config
     )
-    figure = ""
-    if visualize and result.step_volumes:
-        figure_path = (
-            Path(report_dir) / "preprocessing_figures" / f"{subject_id}_qc.png"
-        )
-        generate_5step_progression_figure(
-            subject_id,
-            result.step_volumes,
-            str(figure_path),
-            result.raw_shape,
-            result.final_shape,
-        )
-        figure = str(figure_path)
 
     status = "SUCCESS" if result.qa_passed else "QA_FAILED"
     error = "" if result.qa_passed else result.qa_message
@@ -80,7 +64,6 @@ def _process_one(
         "status": status,
         "output_file": result.output_path,
         "mask_file": result.mask_path,
-        "qa_figure": figure,
         "error": error,
     }
 
@@ -137,9 +120,6 @@ def main() -> int:
     parser.add_argument(
         "--normalization", choices=("zscore", "minmax"), default="zscore"
     )
-    parser.add_argument(
-        "--visualize", action="store_true", help="Write tri-planar QC PNGs"
-    )
     args = parser.parse_args()
     if args.num_workers < 1:
         parser.error("--num_workers must be positive")
@@ -156,14 +136,12 @@ def main() -> int:
     )
     print(
         f"Device: {args.device} | Brain extractor: {args.brain_extractor} | "
-        f"Workers: {args.num_workers} | Visualization: {args.visualize}",
+        f"Workers: {args.num_workers}",
         flush=True,
     )
     output_dir, report_dir = Path(args.output_dir), Path(args.report_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     report_dir.mkdir(parents=True, exist_ok=True)
-    if args.visualize:
-        (report_dir / "preprocessing_figures").mkdir(parents=True, exist_ok=True)
 
     config = PipelineConfig(
         template_path=Path(args.template),
@@ -190,8 +168,6 @@ def main() -> int:
                 sid,
                 path,
                 str(output_dir),
-                str(report_dir),
-                args.visualize,
                 config,
             )
             futures[future] = (sid, path)
@@ -215,7 +191,6 @@ def main() -> int:
                     "status": "FAILED",
                     "output_file": "",
                     "mask_file": "",
-                    "qa_figure": "",
                     "error": f"{type(exc).__name__}: {exc}",
                 }
                 row["_traceback"] = traceback.format_exc()
@@ -253,7 +228,6 @@ def main() -> int:
         "status",
         "output_file",
         "mask_file",
-        "qa_figure",
         "error",
     ]
     rows.sort(key=lambda item: item["subject_id"])

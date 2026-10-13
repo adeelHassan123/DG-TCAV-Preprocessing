@@ -260,40 +260,92 @@ def register_to_mni(
 
     if tuple(moving_mask.shape) != moving.GetSize():
         raise ValueError("Brain mask shape does not match moving image dimensions")
-
-    # Initial geometric alignment (centers of physical bounding boxes)
-    initial_transform = (
-        sitk.AffineTransform(3)
-        if registration == "affine"
-        else sitk.Euler3DTransform()
+    moving_mask_image = sitk.GetImageFromArray(
+        moving_mask.transpose(2, 1, 0).astype(np.uint8)
     )
-    initial = sitk.CenteredTransformInitializer(
-        fixed,
-        moving,
-        initial_transform,
-        sitk.CenteredTransformInitializerFilter.GEOMETRY,
-    )
+    moving_mask_image.CopyInformation(moving)
 
-    method = sitk.ImageRegistrationMethod()
-    method.SetMetricAsMattesMutualInformation(numberOfHistogramBins=int(metric_bins))
-    method.SetMetricSamplingStrategy(method.RANDOM)
-    method.SetMetricSamplingPercentage(0.20, int(random_seed))
-    method.SetInterpolator(sitk.sitkLinear)
+    fixed_mask = None
+    if reference_mask_path and Path(reference_mask_path).is_file():
+        fixed_mask = sitk.ReadImage(str(reference_mask_path), sitk.sitkUInt8)
+        same_geometry = (
+            fixed_mask.GetSize() == fixed.GetSize()
+            and np.allclose(fixed_mask.GetSpacing(), fixed.GetSpacing(), atol=1e-5)
+            and np.allclose(fixed_mask.GetOrigin(), fixed.GetOrigin(), atol=1e-4)
+            and np.allclose(fixed_mask.GetDirection(), fixed.GetDirection(), atol=1e-6)
+        )
+        if not same_geometry:
+            raise ValueError("Fixed registration mask geometry does not match reference image")
 
-    # Stabilize optimizer with physical shift scaling and conservative learning rate
-    method.SetOptimizerScalesFromPhysicalShift()
-    method.SetOptimizerAsGradientDescent(
-        learningRate=0.25,
-        numberOfIterations=int(iterations),
-        convergenceMinimumValue=1e-6,
-        convergenceWindowSize=10,
-    )
-    method.SetShrinkFactorsPerLevel([int(v) for v in shrink_factors])
-    method.SetSmoothingSigmasPerLevel([float(v) for v in smoothing_sigmas])
-    method.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
-    method.SetInitialTransform(initial, inPlace=False)
+    def optimize(initial_transform, max_iterations: int):
+        method = sitk.ImageRegistrationMethod()
+        method.SetMetricAsMattesMutualInformation(numberOfHistogramBins=int(metric_bins))
+        if fixed_mask is not None:
+            method.SetMetricFixedMask(fixed_mask)
+        method.SetMetricSamplingStrategy(method.RANDOM)
+        method.SetMetricSamplingPercentage(0.20, int(random_seed))
+        method.SetInterpolator(sitk.sitkLinear)
+        method.SetOptimizerScalesFromPhysicalShift()
+        method.SetOptimizerAsGradientDescent(
+            learningRate=0.10,
+            numberOfIterations=int(max_iterations),
+            convergenceMinimumValue=1e-6,
+            convergenceWindowSize=10,
+        )
+        method.SetShrinkFactorsPerLevel([int(v) for v in shrink_factors])
+        method.SetSmoothingSigmasPerLevel([float(v) for v in smoothing_sigmas])
+        method.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
+        method.SetInitialTransform(initial_transform, inPlace=False)
+        return method.Execute(fixed, moving)
 
-    transform = method.Execute(fixed, moving)
+    # First settle head pose with a rigid transform. Refine only afterward with
+    # affine degrees of freedom so scaling/shear cannot dominate the initial fit.
+    if fixed_mask is not None:
+        # Initialize from binary brain masks, not raw image intensity moments.
+        # Scanner contrast and anatomy can shift intensity centroids even when
+        # brain geometry is correct. Mask moments align the anatomical centers.
+        rigid_initial = sitk.CenteredTransformInitializer(
+            fixed_mask,
+            moving_mask_image,
+            sitk.Euler3DTransform(),
+            sitk.CenteredTransformInitializerFilter.MOMENTS,
+        )
+    else:
+        rigid_initial = sitk.CenteredTransformInitializer(
+            fixed,
+            moving,
+            sitk.Euler3DTransform(),
+            sitk.CenteredTransformInitializerFilter.GEOMETRY,
+        )
+    rigid_transform = optimize(rigid_initial, max(50, int(iterations) // 2))
+    if registration == "rigid":
+        transform = rigid_transform
+    else:
+        # SimpleITK may wrap the optimized transform in a CompositeTransform.
+        # Extract the optimized rigid component before converting it to affine.
+        rigid_component = rigid_transform
+        while rigid_component.GetName() == "CompositeTransform":
+            rigid_component = rigid_component.GetBackTransform()
+        affine_initial = sitk.AffineTransform(3)
+        affine_initial.SetCenter(rigid_component.GetCenter())
+        affine_initial.SetMatrix(rigid_component.GetMatrix())
+        affine_initial.SetTranslation(rigid_component.GetTranslation())
+        transform = optimize(affine_initial, iterations)
+
+        # Refuse gross global expansion/compression instead of silently writing
+        # a visibly malformed registered brain. Singular values summarize the
+        # affine's scale in each principal direction, including coupled shear.
+        affine_component = transform
+        while affine_component.GetName() == "CompositeTransform":
+            affine_component = affine_component.GetBackTransform()
+        scale_factors = np.linalg.svd(
+            np.asarray(affine_component.GetMatrix()).reshape(3, 3), compute_uv=False
+        )
+        if np.any(scale_factors < 0.70) or np.any(scale_factors > 1.40):
+            raise RuntimeError(
+                "Affine registration rejected: implausible scale factors "
+                f"{np.round(scale_factors, 3).tolist()}"
+            )
 
     # Resample moving image using linear interpolation
     aligned = sitk.Resample(
@@ -301,12 +353,8 @@ def register_to_mni(
     )
 
     # Resample moving mask using nearest neighbor interpolation
-    mask_image = sitk.GetImageFromArray(
-        moving_mask.transpose(2, 1, 0).astype(np.uint8)
-    )
-    mask_image.CopyInformation(moving)
     aligned_mask = sitk.Resample(
-        mask_image, fixed, transform, sitk.sitkNearestNeighbor, 0, sitk.sitkUInt8
+        moving_mask_image, fixed, transform, sitk.sitkNearestNeighbor, 0, sitk.sitkUInt8
     )
 
     # SimpleITK (z, y, x) -> NumPy (x, y, z)

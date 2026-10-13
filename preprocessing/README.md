@@ -11,7 +11,7 @@ time augmentation automatically:
 
 ```powershell
 python -m pip install -r requirements.txt
-python run_preprocessing.py --input_dir DATA --output_dir data/preprocessed --device cpu --visualize
+python run_preprocessing.py --input_dir DATA --output_dir data/preprocessed --device cpu
 ```
 
 `--num_workers` enables process based batch execution. For CUDA, install the
@@ -26,7 +26,8 @@ and shifts the affine so voxel coordinates remain in MNI space. A supplied
 template can be passed with `--template`. The reference geometry and spatial
 header codes are copied to both outputs.
 
-The report directory contains `qa_manifest.csv`, `failures.log`, and optional
-tri-planar PNGs under `preprocessing_figures/`. A failed model invocation or
+The report directory contains `qa_manifest.csv` and `failures.log`. Use
+`preprocessing_walkthrough.ipynb` for stage-by-stage interactive review.
+A failed model invocation or
 registration marks only that scan as failed; no heuristic skull-strip fallback
 is applied.

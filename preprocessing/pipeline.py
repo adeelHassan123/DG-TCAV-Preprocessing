@@ -73,6 +73,15 @@ def validate_brain_mask(
     if voxel_count == 0:
         return False, "EMPTY_MASK: Zero brain voxels detected", 0.0, 0, 0.0
 
+    # Compute overlap before the remaining checks so a failed QA status does
+    # not hide a useful Dice score (the old early return reported 0.000).
+    dice_score = 1.0
+    if template_mask is not None:
+        tmpl_bool = np.asarray(template_mask, dtype=bool)
+        intersection = np.count_nonzero(boolean_mask & tmpl_bool)
+        total = voxel_count + np.count_nonzero(tmpl_bool)
+        dice_score = float(2.0 * intersection / total) if total > 0 else 0.0
+
     # 2. Plausible adult human brain volume check (normally 1.1L - 1.5L)
     if volume_liters < min_volume_liters:
         return (
@@ -91,38 +100,47 @@ def validate_brain_mask(
             0.0,
         )
 
-    # 3. Bounding box boundary collision check (brain should not touch lateral or superior edges)
-    touches_boundary = (
-        boolean_mask[0, :, :].any()
-        or boolean_mask[-1, :, :].any()
-        or boolean_mask[:, 0, :].any()
-        or boolean_mask[:, -1, :].any()
-        or boolean_mask[:, :, -1].any()
+    # 3. Only flag a field edge when the reference brain mask does not itself
+    # reach that edge. The MNI grid is cropped at the inferior edge (z=0), so
+    # treating that expected template contact as a subject collision is a
+    # false positive.
+    boundaries = (
+        (boolean_mask[0, :, :], 0, 0),
+        (boolean_mask[-1, :, :], 0, -1),
+        (boolean_mask[:, 0, :], 1, 0),
+        (boolean_mask[:, -1, :], 1, -1),
+        (boolean_mask[:, :, 0], 2, 0),
+        (boolean_mask[:, :, -1], 2, -1),
     )
+    touches_boundary = False
+    for subject_edge, axis, index in boundaries:
+        if not subject_edge.any():
+            continue
+        if template_mask is None:
+            touches_boundary = True
+            break
+        template_edge = np.take(np.asarray(template_mask, dtype=bool), index, axis=axis)
+        if not template_edge.any():
+            touches_boundary = True
+            break
     if touches_boundary:
         return (
             False,
-            "BOUNDARY_COLLISION: Brain mask touches lateral or superior field boundaries",
+            "BOUNDARY_COLLISION: Brain mask touches a field edge not reached by the template mask",
             volume_liters,
             voxel_count,
-            0.0,
+            dice_score,
         )
 
     # 4. Dice overlap with standard MNI brain mask
-    dice_score = 1.0
-    if template_mask is not None:
-        tmpl_bool = np.asarray(template_mask, dtype=bool)
-        intersection = np.count_nonzero(boolean_mask & tmpl_bool)
-        total = voxel_count + np.count_nonzero(tmpl_bool)
-        dice_score = float(2.0 * intersection / total) if total > 0 else 0.0
-        if dice_score < min_dice:
-            return (
-                False,
-                f"LOW_DICE_OVERLAP: Dice {dice_score:.3f} < {min_dice:.2f} with MNI template",
-                volume_liters,
-                voxel_count,
-                dice_score,
-            )
+    if dice_score < min_dice:
+        return (
+            False,
+            f"LOW_DICE_OVERLAP: Dice {dice_score:.3f} < {min_dice:.2f} with MNI template",
+            volume_liters,
+            voxel_count,
+            dice_score,
+        )
 
     return True, "VALID", volume_liters, voxel_count, dice_score
 

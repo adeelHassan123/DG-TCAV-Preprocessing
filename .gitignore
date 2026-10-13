@@ -63,4 +63,5 @@ templates/*.nii.gz
 .DS_Store
 Thumbs.db
 desktop.ini
-extra/*
+extra
+Reference

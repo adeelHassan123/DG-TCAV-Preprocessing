@@ -2,6 +2,7 @@
 
 # Run external terminal commands like HD-BET
 import subprocess
+import time
 # Handle filesystem paths safely across operating systems
 from pathlib import Path
 # Type hint for returning a tuple of arrays
@@ -78,13 +79,36 @@ def extract_brain(input_nifti: str | Path, work_dir: str | Path,
                 resolved_device = "cuda" if torch.cuda.is_available() else "cpu"
             except ImportError:
                 resolved_device = "cpu"
+        if resolved_device.startswith("cuda"):
+            try:
+                import torch
+            except ImportError as exc:
+                raise BrainExtractionError(
+                    "CUDA was requested, but PyTorch is not installed in this environment."
+                ) from exc
+            if not torch.cuda.is_available():
+                raise BrainExtractionError(
+                    "CUDA was requested, but this Python environment cannot access a CUDA GPU. "
+                    "Check the active notebook runtime and its PyTorch build."
+                )
         # Append target computing device to the command
         command += ["-device", resolved_device]
         # Disable test-time augmentation on CPU to run 4x faster
         if disable_tta or resolved_device == "cpu":
             command.append("--disable_tta")
+        print(
+            f"HD-BET starting: device={resolved_device}, "
+            f"TTA={'off' if '--disable_tta' in command else 'on'}; "
+            "elapsed time includes process startup and any first-run weight download.",
+            flush=True,
+        )
+        extraction_started = time.perf_counter()
         # Run the HD-BET extraction command
         _run(command)
+        print(
+            f"HD-BET finished in {time.perf_counter() - extraction_started:.1f}s.",
+            flush=True,
+        )
         # Verify that HD-BET actually created the brain image
         if not brain_path.is_file():
             raise BrainExtractionError(f"HD-BET did not produce expected image: {brain_path}")

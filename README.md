@@ -57,7 +57,7 @@ DG-TCAV/
 │   ├── pipeline.py            # End-to-end pipeline runner & QA validator
 │   ├── registration.py        # MNI152 template alignment & fetcher
 │   ├── skull_stripping.py     # HD-BET GPU brain extraction
-│   └── visualizer.py          # Tri-planar QC visualization
+├── preprocessing_walkthrough.ipynb # Stage-by-stage interactive inspection
 ├── tests/                     # Unit and synthetic pipeline regression tests
 │   ├── test_pipeline_synthetic.py
 │   └── test_real_scan.py
@@ -111,8 +111,7 @@ python run_preprocessing.py \
     --report_dir "reports/preprocessing" \
     --device auto \
     --max_subjects 0 \
-    --num_workers 1 \
-    --visualize
+    --num_workers 1
 ```
 
 ### CLI Arguments
@@ -125,7 +124,6 @@ python run_preprocessing.py \
 | `--device` | String | `auto` | Execution device (`auto`, `cuda`, `cpu`, `mps`) |
 | `--max_subjects`| Int | `2` | Max scans to process (`0` for all discovered scans) |
 | `--num_workers` | Int | `1` | Concurrent worker processes |
-| `--visualize` | Flag | `False` | Generates tri-planar QC comparison figures |
 | `--disable_tta` | Flag | `False` | Disables HD-BET test-time augmentation for speed |
 
 ---
@@ -170,7 +168,7 @@ In clinical neuroimaging, no individual in-vivo patient scan has a universal phy
    * **Dice Overlap:** Verified against the standard MNI brain mask ($\text{Dice} \ge 0.70$).
    * **Intracranial Volume (ICV):** Adult human biological range check ($0.90\text{ L} \le V \le 1.90\text{ L}$).
    * **Boundary Collisions:** Strict check that zero brain voxels clip the outer grid boundaries.
-3. **Tri-Planar Visual QC:** Slices extracted in Axial (Nose pointing UP), Coronal (Vertex UP), and Sagittal orientations with mask contour overlays for audit review.
+3. **Interactive visual review:** Use `preprocessing_walkthrough.ipynb` to inspect the raw scan and each saved pipeline stage in separate notebook cells.
 
 ---
 

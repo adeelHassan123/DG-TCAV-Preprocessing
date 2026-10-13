@@ -26,7 +26,8 @@ def normalize_brain_volume(
         3D boolean or binary integer mask indicating brain parenchyma (1=brain, 0=background).
     mode : str, default="zscore"
         Normalization strategy:
-          - "zscore": (I - mean) / std strictly across the brain foreground.
+          - "zscore": clip foreground to the 0.5/99.5 percentiles, then
+            standardize strictly across the brain foreground.
           - "minmax": (I - min) / (max - min) rescaled to [0, 1] across the brain foreground.
 
     Returns
@@ -57,6 +58,11 @@ def normalize_brain_volume(
         raise ValueError("Brain voxels contain NaN or Inf values prior to normalization.")
 
     if mode == "zscore":
+        lower, upper = np.percentile(values, (0.5, 99.5))
+        clipped = np.clip(values, lower, upper)
+        image = np.asarray(image, dtype=np.float32).copy()
+        image[boolean_mask] = clipped
+        values = clipped
         mean = float(np.mean(values))
         std = float(np.std(values))
         if not np.isfinite(std) or std < 1e-8:
