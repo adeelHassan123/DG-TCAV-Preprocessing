@@ -154,13 +154,13 @@ def registration(
     moving_sitk_img: sitk.Image,
     mni_template_path: str | Path,
     moving_mask: sitk.Image | None = None,
-    max_outside_fraction: float = 0.01,
+    max_outside_fraction: float = 0.03,
 ):
     """Register a brain with masked rigid alignment followed by affine refinement.
 
     Brain masks keep background from driving the mutual-information fit. The
     moving mask is checked against an expanded template grid so a fit that
-    crops more than 1% of extracted brain tissue is rejected before output.
+    crops more than 3% of extracted brain tissue is rejected before output.
     """
     fixed_img = sitk.ReadImage(str(mni_template_path), sitk.sitkFloat32)
     moving_img = sitk.Cast(moving_sitk_img, sitk.sitkFloat32)
