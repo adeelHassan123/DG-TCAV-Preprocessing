@@ -220,11 +220,12 @@ def main() -> int:
                 str(expected_mask),
                 PIPELINE_VERSION,
             )
-            if (
-                args.resume
-                and _has_complete_output(expected_output)
-                and prior_key in known_successes
-            ):
+            prior_success = (
+                prior_key in known_successes
+                or any(item[0] == sid for item in known_successes)
+                or not manifest_has_content
+            )
+            if args.resume and _has_complete_output(expected_output) and prior_success:
                 print(f"Resume: existing image and mask found for {sid}; skipping.", flush=True)
             else:
                 pending.append((sid, input_path))
